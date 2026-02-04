@@ -1,6 +1,24 @@
 local mat_posterize = Material("pp/vlazed/posterize")
+local mat_posterize_cel = Material("pp/vlazed/posterize_cel")
+local mat_posterize_light = Material("pp/vlazed/posterize_light")
+local mat_posterize_color = Material("pp/vlazed/posterize_color")
 
 local pp_posterize = CreateClientConVar("pp_vlazedposterize", "0", true, false, "Enable additive posterize", 0, 1)
+
+local pp_posterize_debug_color =
+	CreateClientConVar("pp_vlazedposterize_debug_color", "0", true, false, "Show color stage of posterize shader", 0, 1)
+local pp_posterize_debug_light = CreateClientConVar(
+	"pp_vlazedposterize_debug_light",
+	"0",
+	true,
+	false,
+	"Show lighting stage of posterize shader",
+	0,
+	1
+)
+local pp_posterize_debug_cel =
+	CreateClientConVar("pp_vlazedposterize_debug_cel", "0", true, false, "Show cel stage of posterize shader", 0, 1)
+
 local pp_posterize_celcount =
 	CreateClientConVar("pp_vlazedposterize_celcount", "20", true, false, "Number of bands in lighting", 0.001)
 local pp_posterize_r = CreateClientConVar("pp_vlazedposterize_r", "255", true, false, nil, 0, 255)
@@ -27,38 +45,59 @@ local pp_posterize_gain_a = CreateClientConVar("pp_vlazedposterize_gain_a", "255
 local pp_posterize_gain_scale = CreateClientConVar("pp_vlazedposterize_gain", "1", true, false, nil, 0, 255)
 
 local hookName = "vlazed_posterize_hook"
-local width, height = ScrW(), ScrH()
+
+---@type IMaterial
+local IMAT = FindMetaTable("IMaterial")
+local SetFloat = IMAT.SetFloat
+
+local render_UpdateScreenEffectTexture = render.UpdateScreenEffectTexture
+local render_SetMaterial = render.SetMaterial
+local render_DrawScreenQuad = render.DrawScreenQuad
 
 function render.DrawVlazedPosterize()
 	-- TODO: Use local variables
 
-	render.UpdateScreenEffectTexture()
+	render_UpdateScreenEffectTexture()
 
-	mat_posterize:SetFloat("$c0_x", pp_posterize_celcount:GetFloat())
-	mat_posterize:SetFloat("$c0_y", pp_posterize_r:GetFloat() / 255)
-	mat_posterize:SetFloat("$c0_z", pp_posterize_g:GetFloat() / 255)
-	mat_posterize:SetFloat("$c0_w", pp_posterize_b:GetFloat() / 255)
+	local mat = mat_posterize
+
+	-- TODO: Investigate why SetString on pixshader doesn't affect the shader
+	if pp_posterize_debug_cel:GetBool() then
+		mat = mat_posterize_cel
+	elseif pp_posterize_debug_light:GetBool() then
+		mat = mat_posterize_light
+	elseif pp_posterize_debug_color:GetBool() then
+		mat = mat_posterize_color
+	end
+
+	SetFloat(mat, "$c0_x", pp_posterize_celcount:GetFloat())
+	SetFloat(mat, "$c0_y", pp_posterize_r:GetFloat() / 255)
+	SetFloat(mat, "$c0_z", pp_posterize_g:GetFloat() / 255)
+	SetFloat(mat, "$c0_w", pp_posterize_b:GetFloat() / 255)
 
 	local liftScale = pp_posterize_lift_scale:GetFloat()
-	mat_posterize:SetFloat("$c1_x", pp_posterize_lift_r:GetFloat() / 255 * liftScale)
-	mat_posterize:SetFloat("$c1_y", pp_posterize_lift_g:GetFloat() / 255 * liftScale)
-	mat_posterize:SetFloat("$c1_z", pp_posterize_lift_b:GetFloat() / 255 * liftScale)
+	SetFloat(mat, "$c1_x", pp_posterize_lift_r:GetFloat() / 255 * liftScale)
+	SetFloat(mat, "$c1_y", pp_posterize_lift_g:GetFloat() / 255 * liftScale)
+	SetFloat(mat, "$c1_z", pp_posterize_lift_b:GetFloat() / 255 * liftScale)
 	local gammaScale = pp_posterize_gamma_scale:GetFloat()
-	mat_posterize:SetFloat("$c2_x", pp_posterize_gamma_r:GetFloat() / 255 * gammaScale)
-	mat_posterize:SetFloat("$c2_y", pp_posterize_gamma_g:GetFloat() / 255 * gammaScale)
-	mat_posterize:SetFloat("$c2_z", pp_posterize_gamma_b:GetFloat() / 255 * gammaScale)
+	SetFloat(mat, "$c2_x", pp_posterize_gamma_r:GetFloat() / 255 * gammaScale)
+	SetFloat(mat, "$c2_y", pp_posterize_gamma_g:GetFloat() / 255 * gammaScale)
+	SetFloat(mat, "$c2_z", pp_posterize_gamma_b:GetFloat() / 255 * gammaScale)
 	local gainScale = pp_posterize_gain_scale:GetFloat()
-	mat_posterize:SetFloat("$c3_x", pp_posterize_gain_r:GetFloat() / 255 * gainScale)
-	mat_posterize:SetFloat("$c3_y", pp_posterize_gain_g:GetFloat() / 255 * gainScale)
-	mat_posterize:SetFloat("$c3_z", pp_posterize_gain_b:GetFloat() / 255 * gainScale)
-	render.SetMaterial(mat_posterize)
-	render.DrawScreenQuad()
+	SetFloat(mat, "$c3_x", pp_posterize_gain_r:GetFloat() / 255 * gainScale)
+	SetFloat(mat, "$c3_y", pp_posterize_gain_g:GetFloat() / 255 * gainScale)
+	SetFloat(mat, "$c3_z", pp_posterize_gain_b:GetFloat() / 255 * gainScale)
+
+	render_SetMaterial(mat)
+	render_DrawScreenQuad()
 end
+
+local posterize = render.DrawVlazedPosterize
 
 local function enablePosterize()
 	if pp_posterize:GetBool() then
 		hook.Add("RenderScreenspaceEffects", hookName, function()
-			render.DrawVlazedPosterize()
+			posterize()
 		end)
 	else
 		hook.Remove("RenderScreenspaceEffects", hookName)
@@ -160,5 +199,10 @@ list.Set("PostProcess", "Posterize (vlazed)", {
 			"pp_vlazedposterize_gain_a"
 		)
 		lightSettings:NumSlider("Gain Multiplier", "pp_vlazedposterize_gain", 0, 100, 5)
+
+		local debugSettings = makeCategory(CPanel, "Debug", "ControlPanel")
+		debugSettings:CheckBox("Color", "pp_vlazedposterize_debug_color")
+		debugSettings:CheckBox("Lighting", "pp_vlazedposterize_debug_light")
+		debugSettings:CheckBox("Cel", "pp_vlazedposterize_debug_cel")
 	end,
 })

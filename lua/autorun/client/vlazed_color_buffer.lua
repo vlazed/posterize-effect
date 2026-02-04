@@ -8,47 +8,57 @@ local rt_Color = GetRenderTargetEx(
 	ScrH(),
 	RT_SIZE_FULL_FRAME_BUFFER,
 	MATERIAL_RT_DEPTH_SHARED,
-	bit.bor(4, 8, 16, 256, 512),
+	bit.bor(4, 8, 16, 256, 512, 32768, 8388608),
 	0,
 	IMAGE_FORMAT_RGB888
 )
 
 local scrFxTexture = render.GetScreenEffectTexture()
 
--- FIXME: materials with a envmap flash to white when shining a flashlight at it
--- also makes decals on brushes flicker
+local render_UpdateScreenEffectTexture = render.UpdateScreenEffectTexture
+local render_UpdateRefractTexture = render.UpdateRefractTexture
+local render_CopyRenderTargetToTexture = render.CopyRenderTargetToTexture
+local render_SetLightingMode = render.SetLightingMode
+local render_SuppressEngineLighting = render.SuppressEngineLighting
+local render_PushRenderTarget = render.PushRenderTarget
+local render_RenderView = render.RenderView
+local render_PopRenderTarget = render.PopRenderTarget
+
 function render.DrawColorBuffer()
-	render.UpdateScreenEffectTexture()
-	render.UpdateRefractTexture()
-	render.CopyRenderTargetToTexture(scrFxTexture)
+	render_UpdateScreenEffectTexture()
+	render_UpdateRefractTexture()
+	render_CopyRenderTargetToTexture(scrFxTexture)
 
-	render.SetLightingMode(1)
-	render.PushRenderTarget(rt_Color)
-	-- render.PushRenderTarget() -- Debug mode
+	-- SetLightingMode does not affect materials with $bumpmap or $lightwarp
+	-- So SuppressEngineLighting is required. However, there are some lighting
+	-- artifacts from this
+	-- TODO: Monitor for changes to lightingmode behavior
+	render_SetLightingMode(1)
+	render_SuppressEngineLighting(true)
+	render_PushRenderTarget(rt_Color)
+	-- render_PushRenderTarget() -- Debug mode
 
-	-- render.ClearDepth()
-	render.RenderView()
-	-- render.DrawScreenQuad()
+	render_RenderView()
 
-	render.PopRenderTarget()
-
-	render.SetLightingMode(0)
+	render_PopRenderTarget()
+	render_SetLightingMode(0)
+	render_SuppressEngineLighting(false)
 end
 
-hook.Remove("RenderScreenspaceEffects", shaderName)
-hook.Remove("PreRender", shaderName)
-if enableBuffer:GetBool() then
-	hook.Add("RenderScreenspaceEffects", shaderName, function()
-		render.DrawColorBuffer()
-	end)
-end
+local colorBuffer = render.DrawColorBuffer
 
-cvars.AddChangeCallback("color_buffer_enable", function(convar, oldValue, newValue)
+local function enableColorBuffer(enabled)
 	hook.Remove("RenderScreenspaceEffects", shaderName)
 	hook.Remove("PreRender", shaderName)
-	if tobool(newValue) then
+	if enabled then
 		hook.Add("RenderScreenspaceEffects", shaderName, function()
-			render.DrawColorBuffer()
+			colorBuffer()
 		end)
 	end
+end
+
+enableColorBuffer(enableBuffer:GetBool())
+
+cvars.AddChangeCallback("color_buffer_enable", function(convar, oldValue, newValue)
+	enableColorBuffer(tobool(newValue))
 end)

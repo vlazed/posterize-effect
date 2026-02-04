@@ -162,6 +162,7 @@ list.Set("PostProcess", "Posterize (vlazed)", {
 		CPanel:ToolPresets("vlazedposterize", options)
 
 		CPanel:CheckBox("Enable", "pp_vlazedposterize")
+		CPanel:CheckBox("Enable color buffer", "color_buffer_enable")
 
 		CPanel:ColorPicker(
 			"Color",

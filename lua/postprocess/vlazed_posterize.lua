@@ -44,7 +44,7 @@ local pp_posterize_gain_b = CreateClientConVar("pp_vlazedposterize_gain_b", "255
 local pp_posterize_gain_a = CreateClientConVar("pp_vlazedposterize_gain_a", "255", true, false, nil, 0, 255)
 local pp_posterize_gain_scale = CreateClientConVar("pp_vlazedposterize_gain", "1", true, false, nil, 0, 255)
 
-local hookName = "vlazed_posterize_hook"
+local posterizeHook = "vlazed_posterize_hook"
 
 ---@type IMaterial
 local IMAT = FindMetaTable("IMaterial")
@@ -55,8 +55,6 @@ local render_SetMaterial = render.SetMaterial
 local render_DrawScreenQuad = render.DrawScreenQuad
 
 function render.DrawVlazedPosterize()
-	-- TODO: Use local variables
-
 	render_UpdateScreenEffectTexture()
 
 	local mat = mat_posterize
@@ -94,20 +92,19 @@ end
 
 local posterize = render.DrawVlazedPosterize
 
-local function enablePosterize()
-	if pp_posterize:GetBool() then
-		hook.Add("RenderScreenspaceEffects", hookName, function()
+local function enablePosterize(enabled)
+	hook.Remove("RenderScreenspaceEffects", posterizeHook)
+	if enabled then
+		hook.Add("RenderScreenspaceEffects", posterizeHook, function()
 			posterize()
 		end)
-	else
-		hook.Remove("RenderScreenspaceEffects", hookName)
 	end
 end
 
 cvars.AddChangeCallback("pp_vlazedposterize", function(cvar, old, new)
-	enablePosterize()
+	enablePosterize(tobool(new))
 end, "vlazed_posterize_callback")
-enablePosterize()
+enablePosterize(pp_posterize:GetBool())
 
 ---Helper for DForm
 ---@param cPanel ControlPanel|DForm
